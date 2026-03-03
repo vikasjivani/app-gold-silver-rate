@@ -11,8 +11,8 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+          "androidAppId": "ca-app-pub-3789345794133466~5226044356",
+          "iosAppId": "ca-app-pub-3789345794133466~5226044356"
         }
       ],
       [
@@ -31,7 +31,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vikas.goldbullion"
+      "bundleIdentifier": "com.ozon.app.gold.silver.rates"
     },
     "android": {
       "adaptiveIcon": {
@@ -39,7 +39,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.vikas.goldbullion"
+      "package": "com.ozon.app.gold.silver.rates"
     },
     "web": {
       "favicon": "./assets/favicon.png"

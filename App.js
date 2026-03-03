@@ -8,17 +8,19 @@ import {
   ScrollView,
   AppState,
   Platform,
+  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 // Try to import AdMob — will fail in Expo Go (no native modules)
-let BannerAd, BannerAdSize, TestIds;
+let BannerAd, BannerAdSize, InterstitialAd, AdEventType;
 let isAdMobAvailable = false;
 try {
   const admob = require('react-native-google-mobile-ads');
   BannerAd = admob.BannerAd;
   BannerAdSize = admob.BannerAdSize;
-  TestIds = admob.TestIds;
+  InterstitialAd = admob.InterstitialAd;
+  AdEventType = admob.AdEventType;
   isAdMobAvailable = true;
 } catch (e) {
   console.log('AdMob not available (Expo Go). Showing placeholder ad.');
@@ -30,7 +32,16 @@ const EXCHANGE_RATE_API = 'https://open.er-api.com/v6/latest/USD';
 const POLL_INTERVAL = 5000; // 5 seconds
 const TROY_OZ_TO_GRAMS = 28.35; // 1 ounce = 28.35 grams
 
-const adUnitId = isAdMobAvailable ? TestIds.ADAPTIVE_BANNER : null;
+// Real AdMob unit IDs
+const BANNER_AD_UNIT_ID = 'ca-app-pub-3789345794133466/9199212756';
+const INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-3789345794133466/6892613614';
+
+// Create interstitial ad instance (outside component to persist across renders)
+const interstitial = isAdMobAvailable
+  ? InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
+    requestNonPersonalizedAdsOnly: true,
+  })
+  : null;
 
 export default function App() {
   const [goldPrice, setGoldPrice] = useState(null);
@@ -41,6 +52,16 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const intervalRef = useRef(null);
   const appState = useRef(AppState.currentState);
+  const prevGoldPrice = useRef(null);
+  const prevSilverPrice = useRef(null);
+  const goldFlash = useRef(new Animated.Value(0)).current;
+  const silverFlash = useRef(new Animated.Value(0)).current;
+  const [goldFlashColor, setGoldFlashColor] = useState('#3FB950');
+  const [silverFlashColor, setSilverFlashColor] = useState('#3FB950');
+
+  // Interstitial ad state
+  const refreshCountRef = useRef(0);
+  const isInterstitialLoaded = useRef(false);
 
   // Fetch exchange rate (once on mount)
   const fetchExchangeRate = useCallback(async () => {
@@ -57,6 +78,17 @@ export default function App() {
     }
   }, []);
 
+  // Trigger flash animation
+  const triggerFlash = useCallback((animValue, setColor, direction) => {
+    setColor(direction === 'up' ? '#3FB950' : '#F85149');
+    animValue.setValue(0.35);
+    Animated.timing(animValue, {
+      toValue: 0,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+  }, []);
+
   // Fetch gold and silver prices
   const fetchPrices = useCallback(async () => {
     try {
@@ -68,20 +100,35 @@ export default function App() {
       const silverData = await silverRes.json();
 
       if (goldData && goldData.price) {
+        if (prevGoldPrice.current !== null && goldData.price !== prevGoldPrice.current) {
+          triggerFlash(goldFlash, setGoldFlashColor, goldData.price > prevGoldPrice.current ? 'up' : 'down');
+        }
+        prevGoldPrice.current = goldData.price;
         setGoldPrice(goldData);
       }
       if (silverData && silverData.price) {
+        if (prevSilverPrice.current !== null && silverData.price !== prevSilverPrice.current) {
+          triggerFlash(silverFlash, setSilverFlashColor, silverData.price > prevSilverPrice.current ? 'up' : 'down');
+        }
+        prevSilverPrice.current = silverData.price;
         setSilverPrice(silverData);
       }
       setLastUpdated(new Date());
       setError(null);
       setLoading(false);
+
+      // Show interstitial ad every 3 refreshes
+      refreshCountRef.current += 1;
+      if (refreshCountRef.current % 3 === 0 && isInterstitialLoaded.current && interstitial) {
+        interstitial.show();
+        isInterstitialLoaded.current = false;
+      }
     } catch (err) {
       console.warn('Failed to fetch prices:', err);
       setError('Failed to fetch prices. Please check your internet connection.');
       setLoading(false);
     }
-  }, []);
+  }, [goldFlash, silverFlash, triggerFlash]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -122,6 +169,29 @@ export default function App() {
       subscription.remove();
     };
   }, [fetchExchangeRate, startPolling, stopPolling]);
+
+  // Interstitial ad event listeners
+  useEffect(() => {
+    if (!interstitial) return;
+
+    const loadedListener = interstitial.addAdEventListener(AdEventType.LOADED, () => {
+      isInterstitialLoaded.current = true;
+    });
+
+    const closedListener = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      // Reload ad for next time
+      isInterstitialLoaded.current = false;
+      interstitial.load();
+    });
+
+    // Start loading the first interstitial
+    interstitial.load();
+
+    return () => {
+      loadedListener();
+      closedListener();
+    };
+  }, []);
 
   const formatUSD = (price) => {
     return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -206,6 +276,7 @@ export default function App() {
         {/* Gold Card */}
         {goldPrice && (
           <View style={[styles.priceCard, styles.goldCard]}>
+            <Animated.View style={[styles.flashOverlay, { backgroundColor: goldFlashColor, opacity: goldFlash }]} />
             <View style={styles.cardHeader}>
               <Text style={styles.metalIcon}>🥇</Text>
               <View>
@@ -255,6 +326,7 @@ export default function App() {
         {/* Silver Card */}
         {silverPrice && (
           <View style={[styles.priceCard, styles.silverCard]}>
+            <Animated.View style={[styles.flashOverlay, { backgroundColor: silverFlashColor, opacity: silverFlash }]} />
             <View style={styles.cardHeader}>
               <Text style={styles.metalIcon}>🥈</Text>
               <View>
@@ -313,7 +385,7 @@ export default function App() {
       <View style={styles.adContainer}>
         {isAdMobAvailable ? (
           <BannerAd
-            unitId={adUnitId}
+            unitId={BANNER_AD_UNIT_ID}
             size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
             requestOptions={{
               requestNonPersonalizedAdsOnly: true,
@@ -439,6 +511,17 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  flashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    zIndex: 1,
   },
   goldCard: {
     backgroundColor: '#1C1A0F',
