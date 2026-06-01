@@ -2,7 +2,7 @@
   "expo": {
     "name": "GoldBullion",
     "slug": "GoldBullion",
-    "version": "1.0.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -39,7 +39,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.ozon.app.gold.silver.rates"
+      "package": "com.ozon.app.gold.silver.rates",
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
